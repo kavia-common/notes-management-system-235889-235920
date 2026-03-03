@@ -41,13 +41,27 @@ app = FastAPI(
     openapi_tags=openapi_tags,
 )
 
-_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
-allow_origins = [o.strip() for o in _allowed_origins.split(",")] if _allowed_origins != "*" else ["*"]
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").strip()
+allow_origins = (
+    [o.strip() for o in _allowed_origins.split(",") if o.strip()]
+    if _allowed_origins != "*"
+    else ["*"]
+)
+
+# CORS note:
+# Browsers reject `Access-Control-Allow-Credentials: true` with a wildcard origin.
+# We do not currently use cookies for auth (we use Bearer tokens), so default to
+# credentials disabled unless explicit non-wildcard origins are configured.
+allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS")
+if allow_credentials is None:
+    allow_credentials_bool = False if allow_origins == ["*"] else True
+else:
+    allow_credentials_bool = allow_credentials.strip().lower() in ("1", "true", "yes", "on")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials_bool,
     allow_methods=[m.strip() for m in os.getenv("ALLOWED_METHODS", "*").split(",")] if os.getenv("ALLOWED_METHODS") else ["*"],
     allow_headers=[h.strip() for h in os.getenv("ALLOWED_HEADERS", "*").split(",")] if os.getenv("ALLOWED_HEADERS") else ["*"],
     max_age=int(os.getenv("CORS_MAX_AGE", "3600")),

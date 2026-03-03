@@ -15,17 +15,33 @@ class DbConfig:
 
 def _default_db_connection_file() -> Path:
     """
-    Compute the default location of notes_database/db_connection.txt.
+    Compute the most likely location of notes_database/db_connection.txt.
 
-    The database container writes db_connection.txt inside:
-    notes-management-system-*/notes_database/db_connection.txt
+    In this monorepo, the database container may live in a *different* sibling workspace
+    than the backend (common in preview environments). We therefore:
 
-    This backend container sits at:
-    notes-management-system-*/notes_backend/
-    so we can locate the sibling notes_database/ folder in the parent directory.
+    1) First try the historical monorepo layout:
+         <repo>/<backend_workspace>/notes_database/db_connection.txt
+    2) If not found, scan sibling workspaces for:
+         <repo>/notes-management-system-*/notes_database/db_connection.txt
+
+    This avoids hard-coding DB env vars while remaining robust across preview layouts.
     """
-    # notes_backend/src/api/db.py -> notes_backend -> workspace root -> notes_database/db_connection.txt
-    return Path(__file__).resolve().parents[3] / "notes_database" / "db_connection.txt"
+    repo_root = Path(__file__).resolve().parents[4]
+
+    # 1) Historical layout (sibling folder inside same workspace root)
+    candidate = Path(__file__).resolve().parents[3] / "notes_database" / "db_connection.txt"
+    if candidate.exists():
+        return candidate
+
+    # 2) Preview layout: separate workspace directories
+    #    e.g. notes-management-system-*/notes_database/db_connection.txt
+    for db_file in repo_root.glob("notes-management-system-*/notes_database/db_connection.txt"):
+        if db_file.exists():
+            return db_file
+
+    # Fall back to the original candidate path (so error messages are deterministic)
+    return candidate
 
 
 def _parse_psql_cmd_to_dsn(psql_cmd: str) -> str:
